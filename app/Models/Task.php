@@ -11,12 +11,17 @@ class Task extends Model
         'title',
         'tag',
         'time',
+        'due_date',
         'priority',
         'done',
+        'completed_at',
+        'notes',
     ];
 
     protected $casts = [
         'done' => 'boolean',
+        'completed_at' => 'datetime',
+        'due_date' => 'date',
     ];
 
     public function user()

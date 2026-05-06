@@ -20,9 +20,7 @@ class TaskController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'tasks' => $tasks,
-            ],
+            'data' => $tasks,
         ], 200);
     }
 
@@ -35,23 +33,25 @@ class TaskController extends Controller
             'title' => 'required|string|max:255',
             'tag' => 'nullable|string|max:50',
             'time' => 'nullable|string',
+            'due_date' => 'nullable|date',
             'priority' => 'nullable|in:low,med,high',
+            'notes' => 'nullable|string',
         ]);
 
         $task = $request->user()->tasks()->create([
             'title' => $validated['title'],
             'tag' => $validated['tag'] ?? 'Work',
             'time' => $validated['time'] ?? null,
+            'due_date' => $validated['due_date'] ?? null,
             'priority' => $validated['priority'] ?? 'med',
             'done' => false,
+            'notes' => $validated['notes'] ?? null,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Task created successfully',
-            'data' => [
-                'task' => $task,
-            ],
+            'data' => $task,
         ], 201);
     }
 
@@ -71,9 +71,7 @@ class TaskController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'task' => $task,
-            ],
+            'data' => $task,
         ], 200);
     }
 
@@ -95,8 +93,10 @@ class TaskController extends Controller
             'title' => 'sometimes|string|max:255',
             'tag' => 'sometimes|string|max:50',
             'time' => 'sometimes|string|nullable',
+            'due_date' => 'sometimes|date|nullable',
             'priority' => 'sometimes|in:low,med,high',
             'done' => 'sometimes|boolean',
+            'notes' => 'sometimes|string|nullable',
         ]);
 
         $task->update($validated);
@@ -104,9 +104,7 @@ class TaskController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Task updated successfully',
-            'data' => [
-                'task' => $task->fresh(),
-            ],
+            'data' => $task->fresh(),
         ], 200);
     }
 
@@ -146,14 +144,17 @@ class TaskController extends Controller
             ], 404);
         }
 
-        $task->update(['done' => !$task->done]);
+        $newDoneStatus = !$task->done;
+
+        $task->update([
+            'done' => $newDoneStatus,
+            'completed_at' => $newDoneStatus ? now() : null,
+        ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Task status toggled',
-            'data' => [
-                'task' => $task->fresh(),
-            ],
+            'data' => $task->fresh(),
         ], 200);
     }
 }
