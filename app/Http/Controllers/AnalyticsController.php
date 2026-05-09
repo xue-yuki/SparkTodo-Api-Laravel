@@ -62,29 +62,25 @@ class AnalyticsController extends Controller
             return 0;
         }
 
-        // Get unique dates when tasks were completed
         $dates = $completedTasks
-            ->filter(function ($task) {
-                return $task->completed_at !== null;
-            })
-            ->map(function ($task) {
-                return Carbon::parse($task->completed_at)->format('Y-m-d');
-            })
+            ->filter(fn($task) => !empty($task->due_date))
+            ->map(fn($task) => Carbon::parse($task->due_date)->format('Y-m-d'))
             ->unique()
             ->sort()
             ->values();
 
-        $streak = 0;
-        $currentStreak = 1;
+        if ($dates->isEmpty()) {
+            return 0;
+        }
+
         $today = Carbon::today()->format('Y-m-d');
         $yesterday = Carbon::yesterday()->format('Y-m-d');
 
-        // Check if streak includes today or yesterday (streak is still active)
         if (!$dates->contains($today) && !$dates->contains($yesterday)) {
-            return 0; // Streak is broken
+            return 0;
         }
 
-        // Count consecutive days from most recent
+        $currentStreak = 1;
         for ($i = count($dates) - 1; $i > 0; $i--) {
             $currentDate = Carbon::parse($dates[$i]);
             $prevDate = Carbon::parse($dates[$i - 1]);
@@ -109,7 +105,7 @@ class AnalyticsController extends Controller
         for ($i = $days - 1; $i >= 0; $i--) {
             $date = Carbon::today()->subDays($i);
             $count = $completedTasks->filter(function ($task) use ($date) {
-                return $task->completed_at && Carbon::parse($task->completed_at)->isSameDay($date);
+                return !empty($task->due_date) && Carbon::parse($task->due_date)->isSameDay($date);
             })->count();
 
             $result[] = $count;
@@ -128,10 +124,9 @@ class AnalyticsController extends Controller
         for ($i = $days - 1; $i >= 0; $i--) {
             $date = Carbon::today()->subDays($i);
             $count = $completedTasks->filter(function ($task) use ($date) {
-                return $task->completed_at && Carbon::parse($task->completed_at)->isSameDay($date);
+                return !empty($task->due_date) && Carbon::parse($task->due_date)->isSameDay($date);
             })->count();
 
-            // Map count to intensity level (0-4)
             $level = match (true) {
                 $count === 0 => 0,
                 $count === 1 => 1,
