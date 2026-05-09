@@ -39,6 +39,9 @@ class AnalyticsController extends Controller
         // Calculate total focus time (placeholder - could be based on task durations)
         $focusTimeHours = $this->calculateFocusTime($completedTasks);
 
+        // Tasks by tag
+        $tasksByTag = $allTasks->groupBy('tag')->map(fn($tasks) => $tasks->count())->sortDesc();
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -49,6 +52,7 @@ class AnalyticsController extends Controller
                 'focus_time_hours' => $focusTimeHours,
                 'tasks_per_day' => $tasksPerDay,
                 'heatmap_data' => $heatmapData,
+                'tasks_by_tag' => $tasksByTag,
             ],
         ], 200);
     }
