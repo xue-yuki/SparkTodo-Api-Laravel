@@ -4,16 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use Kreait\Firebase\Factory;
-use Kreait\Firebase\Auth\SignIn\FailedToSignIn;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
     // Removed constructor to prevent Firebase credential crash when using native auth
 
     /**
-     * Login with Google via Firebase ID Token
+     * Login with Google via Google ID Token
      */
     public function googleLogin(Request $request)
     {
@@ -21,53 +21,61 @@ class AuthController extends Controller
             'id_token' => 'required|string',
         ]);
 
-        try {
-            // Setup Firebase specific to this method
-            $factory = (new Factory)->withServiceAccount(env('FIREBASE_CREDENTIALS'));
-            $auth = $factory->createAuth();
+        // Verify Google ID token with Google's tokeninfo endpoint
+        $response = Http::get('https://oauth2.googleapis.com/tokeninfo', [
+            'id_token' => $request->id_token,
+        ]);
 
-            // Verify Firebase ID token
-            $verifiedIdToken = $auth->verifyIdToken($request->id_token);
-            $uid = $verifiedIdToken->claims()->get('sub');
-            $firebaseUser = $auth->getUser($uid);
-
-            // Get user info
-            $email = $firebaseUser->email;
-            $name = $firebaseUser->displayName ?? explode('@', $email)[0];
-            $photoUrl = $firebaseUser->photoUrl ?? null;
-
-            // Find or create user
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'name' => $name,
-                    'password' => Hash::make(uniqid()), // Random password, not used
-                ]
-            );
-
-            // Create Sanctum token
-            $token = $user->createToken('auth_token')->plainTextToken;
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Login successful',
-                'data' => [
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                    ],
-                    'token' => $token,
-                ],
-            ], 200);
-
-        } catch (\Exception $e) {
+        if ($response->failed() || $response->json('error')) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid Firebase token',
-                'error' => $e->getMessage(),
+                'message' => 'Invalid Google token',
             ], 401);
         }
+
+        $payload = $response->json();
+
+        // Verify token is intended for our app
+        $validAudiences = [
+            '529331902780-g7lj0g60upm2jf459o2h3s3ocbh7c19s.apps.googleusercontent.com', // Android client
+        ];
+        if (!in_array($payload['aud'] ?? '', $validAudiences)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token not intended for this app',
+            ], 401);
+        }
+
+        if (empty($payload['email'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Google account has no email',
+            ], 401);
+        }
+
+        $user = User::firstOrCreate(
+            ['email' => $payload['email']],
+            [
+                'name'     => $payload['name'] ?? explode('@', $payload['email'])[0],
+                'password' => Hash::make(Str::random(24)),
+            ]
+        );
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'data' => [
+                'user' => [
+                    'id'            => $user->id,
+                    'name'          => $user->name,
+                    'email'         => $user->email,
+                    'profile_photo' => $user->profile_photo ?? null,
+                ],
+                'token' => $token,
+            ],
+        ], 200);
     }
 
     /**
